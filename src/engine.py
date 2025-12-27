@@ -2,6 +2,7 @@ import os
 import json
 import re
 import subprocess
+import logging
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai_tools import FileReadTool, FileWriterTool, SerperDevTool, DirectoryReadTool
@@ -286,7 +287,8 @@ class CrewEngine:
             verbose=True,
             allow_delegation=False,
             tools=pm_tools,
-            llm=self.llm
+            llm=self.llm,
+            max_iter=10
         )
 
         dev_agent = Agent(
@@ -308,7 +310,8 @@ class CrewEngine:
             verbose=True,
             allow_delegation=False,
             tools=dev_tools,
-            llm=self.llm
+            llm=self.llm,
+            max_iter=10
         )
 
         qa_agent = Agent(
@@ -318,7 +321,8 @@ class CrewEngine:
             verbose=True,
             allow_delegation=False,
             tools=[self.file_writer],
-            llm=self.llm
+            llm=self.llm,
+            max_iter=10
         )
         
         runner_agent = Agent(
@@ -330,11 +334,15 @@ class CrewEngine:
             
             Use 'DirectoryReadTool' to check which files exist before running them.
             Then, use the Code Executor to run 'pytest <filename>' or 'python <filename>'.
+            
+            If a tool fails (e.g. 'No such file'), verify the filename with DirectoryReadTool.
+            If you cannot find the file or run the code after 2-3 attempts, stop and provide your BEST verdict based on available logs.
             """,
             verbose=True,
             allow_delegation=False,
             tools=[self.code_tool, self.dir_reader],
-            llm=self.llm
+            llm=self.llm,
+            max_iter=5 # Strict limit for DevOps to prevent loops
         )
         
         docs_agent = Agent(
@@ -344,7 +352,8 @@ class CrewEngine:
             verbose=True,
             allow_delegation=False,
             tools=[self.file_writer],
-            llm=self.llm
+            llm=self.llm,
+            max_iter=5
         )
 
         reviewer_agent = Agent(
@@ -357,7 +366,8 @@ class CrewEngine:
             verbose=True,
             allow_delegation=True,
             tools=[self.syntax_tool], # Reviewer gets syntax checker
-            llm=self.llm
+            llm=self.llm,
+            max_iter=10
         )
 
         # --- Tasks ---
@@ -406,14 +416,16 @@ class CrewEngine:
             description="Execute the tests using 'pytest' or run the main script. Report the STDOUT and STDERR.",
             expected_output="Execution logs and pass/fail status.",
             agent=runner_agent,
-            context=[task_qa]
+            context=[task_qa],
+            max_execution_time=300 # 5 minute limit
         )
         
         task_docs = Task(
             description="Create or update 'README.md' or 'CHANGELOG.md' to reflect the new feature and how to run it.",
             expected_output="Documentation content.",
             agent=docs_agent,
-            context=[task_plan, task_dev, task_runner]
+            context=[task_plan, task_dev, task_runner],
+            max_execution_time=300
         )
 
         task_review = Task(
@@ -467,21 +479,24 @@ class CrewEngine:
                 Output the FULL updated files using '### filename' format.
                 """,
                 expected_output="Fixed source code in markdown.",
-                agent=dev_agent
+                agent=dev_agent,
+                max_execution_time=300
             )
 
             task_qa_fix = Task(
                 description="Update or add tests for the fixed code.",
                 expected_output="Updated test code in markdown.",
                 agent=qa_agent,
-                context=[task_fix]
+                context=[task_fix],
+                max_execution_time=300
             )
             
             task_runner_fix = Task(
                 description="Run the updated tests.",
                 expected_output="Execution logs.",
                 agent=runner_agent,
-                context=[task_qa_fix]
+                context=[task_qa_fix],
+                max_execution_time=300
             )
 
             task_review_fix = Task(
@@ -492,7 +507,8 @@ class CrewEngine:
                 """,
                 expected_output="Verdict (APPROVED or REJECTED).",
                 agent=reviewer_agent,
-                context=[task_fix, task_qa_fix, task_runner_fix]
+                context=[task_fix, task_qa_fix, task_runner_fix],
+                max_execution_time=300
             )
             
             fix_crew = Crew(
