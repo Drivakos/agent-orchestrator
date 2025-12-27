@@ -4,3 +4,4 @@ python-dotenv
 crewai-tools
 fastapi
 uvicorn
+pytest

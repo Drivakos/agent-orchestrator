@@ -5,6 +5,7 @@ import subprocess
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai_tools import FileReadTool, FileWriterTool, SerperDevTool
+from src.tools import CodeExecutionTool
 
 load_dotenv()
 
@@ -27,6 +28,7 @@ class CrewEngine:
         # Initialize Tools
         self.file_writer = FileWriterTool()
         self.file_reader = FileReadTool()
+        self.code_tool = CodeExecutionTool(working_dir=self.output_dir)
         self.search_tool = None
         
         if os.getenv("SERPER_API_KEY"):
@@ -311,13 +313,22 @@ class CrewEngine:
             tools=[self.file_writer],
             llm=self.llm
         )
+        
+        runner_agent = Agent(
+            role='DevOps Engineer',
+            goal='Execute code and tests to verify functionality.',
+            backstory="You are the DevOps Engineer. You run the code and tests using the Code Executor tool and report the results.",
+            verbose=True,
+            allow_delegation=False,
+            tools=[self.code_tool],
+            llm=self.llm
+        )
 
         reviewer_agent = Agent(
             role='Chief Architect',
             goal='Review and Approval.',
-            backstory="""Review the work. Ensure it matches the memory and requirements.
-            You have the power to REJECT the work if it's incomplete, buggy, or lacks tests.
-            If REJECTED, the team will have to fix it.
+            backstory="""Review the work. Check the source code, tests, AND the test execution results provided by the DevOps Engineer.
+            If tests failed or the code is buggy, REJECT it.
             """,
             verbose=True,
             allow_delegation=True,
@@ -344,21 +355,29 @@ class CrewEngine:
             agent=qa_agent,
             context=[task_dev]
         )
+        
+        task_runner = Task(
+            description="Execute the tests using 'pytest' or run the main script. Report the STDOUT and STDERR.",
+            expected_output="Execution logs and pass/fail status.",
+            agent=runner_agent,
+            context=[task_qa]
+        )
 
         task_review = Task(
             description="""
-            Review the code and tests.
+            Review the code, tests, and EXECUTION RESULTS.
+            If tests failed, you MUST REJECT.
             If everything looks good, start your response with "APPROVED".
             If there are issues, start your response with "REJECTED" and list the specific feedback/issues that need fixing.
             """,
             expected_output="Verdict (APPROVED or REJECTED with feedback).",
             agent=reviewer_agent,
-            context=[task_plan, task_dev, task_qa]
+            context=[task_plan, task_dev, task_qa, task_runner]
         )
 
         crew = Crew(
-            agents=[pm_agent, dev_agent, qa_agent, reviewer_agent],
-            tasks=[task_plan, task_dev, task_qa, task_review],
+            agents=[pm_agent, dev_agent, qa_agent, runner_agent, reviewer_agent],
+            tasks=[task_plan, task_dev, task_qa, task_runner, task_review],
             process=Process.sequential,
             verbose=True
         )
@@ -398,21 +417,28 @@ class CrewEngine:
                 agent=qa_agent,
                 context=[task_fix]
             )
+            
+            task_runner_fix = Task(
+                description="Run the updated tests.",
+                expected_output="Execution logs.",
+                agent=runner_agent,
+                context=[task_qa_fix]
+            )
 
             task_review_fix = Task(
                  description="""
-                Review the FIXED code and tests.
+                Review the FIXED code, tests, and NEW execution results.
                 If satisfied, start with "APPROVED".
                 If still issues, start with "REJECTED".
                 """,
                 expected_output="Verdict (APPROVED or REJECTED).",
                 agent=reviewer_agent,
-                context=[task_fix, task_qa_fix]
+                context=[task_fix, task_qa_fix, task_runner_fix]
             )
             
             fix_crew = Crew(
-                agents=[dev_agent, qa_agent, reviewer_agent],
-                tasks=[task_fix, task_qa_fix, task_review_fix],
+                agents=[dev_agent, qa_agent, runner_agent, reviewer_agent],
+                tasks=[task_fix, task_qa_fix, task_runner_fix, task_review_fix],
                 process=Process.sequential,
                 verbose=True
             )
