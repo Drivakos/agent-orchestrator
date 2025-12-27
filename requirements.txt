@@ -2,3 +2,5 @@ crewai
 langchain_openai
 python-dotenv
 crewai-tools
+fastapi
+uvicorn
