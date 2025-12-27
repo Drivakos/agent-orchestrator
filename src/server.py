@@ -19,7 +19,7 @@ async def run_task(request: TaskRequest):
     If the project doesn't exist, it creates it.
     """
     try:
-        engine = CrewEngine(project_name=request.project_name)
+        engine = CrewEngine(project_name=request.project_name, init_git=False)
         result = engine.run(request.user_story)
         return {"status": "success", "result": result, "project": request.project_name}
     except Exception as e:

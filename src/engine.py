@@ -291,7 +291,10 @@ class CrewEngine:
         reviewer_agent = Agent(
             role='Chief Architect',
             goal='Review and Approval.',
-            backstory="Review the work. Ensure it matches the memory and requirements.",
+            backstory="""Review the work. Ensure it matches the memory and requirements.
+            You have the power to REJECT the work if it's incomplete, buggy, or lacks tests.
+            If REJECTED, the team will have to fix it.
+            """,
             verbose=True,
             allow_delegation=True,
             llm=self.llm
@@ -319,8 +322,12 @@ class CrewEngine:
         )
 
         task_review = Task(
-            description="Final review.",
-            expected_output="Verdict.",
+            description="""
+            Review the code and tests.
+            If everything looks good, start your response with "APPROVED".
+            If there are issues, start your response with "REJECTED" and list the specific feedback/issues that need fixing.
+            """,
+            expected_output="Verdict (APPROVED or REJECTED with feedback).",
             agent=reviewer_agent,
             context=[task_plan, task_dev, task_qa]
         )
@@ -333,9 +340,68 @@ class CrewEngine:
         )
 
         result = crew.kickoff()
-        
-        # Save files and update memory
         self._save_files_from_output(crew)
+
+        # --- Iterative Feedback Loop ---
+        max_iterations = 3
+        iteration = 0
+        
+        while "REJECTED" in str(result).upper() and iteration < max_iterations:
+            iteration += 1
+            print(f"\n[Engine] Review rejected. Starting Iteration {iteration}/{max_iterations} for fixes...")
+            
+            # Feedback from the previous review
+            feedback = str(result)
+            
+            # New Tasks for the Fix Cycle
+            task_fix = Task(
+                description=f"""
+                The previous submission was REJECTED.
+                
+                **Reviewer Feedback:**
+                {feedback}
+                
+                Fix the code and/or tests to address the feedback.
+                Output the FULL updated files using '### filename' format.
+                """,
+                expected_output="Fixed source code in markdown.",
+                agent=dev_agent
+            )
+
+            task_qa_fix = Task(
+                description="Update or add tests for the fixed code.",
+                expected_output="Updated test code in markdown.",
+                agent=qa_agent,
+                context=[task_fix]
+            )
+
+            task_review_fix = Task(
+                 description="""
+                Review the FIXED code and tests.
+                If satisfied, start with "APPROVED".
+                If still issues, start with "REJECTED".
+                """,
+                expected_output="Verdict (APPROVED or REJECTED).",
+                agent=reviewer_agent,
+                context=[task_fix, task_qa_fix]
+            )
+            
+            fix_crew = Crew(
+                agents=[dev_agent, qa_agent, reviewer_agent],
+                tasks=[task_fix, task_qa_fix, task_review_fix],
+                process=Process.sequential,
+                verbose=True
+            )
+            
+            result = fix_crew.kickoff()
+            self._save_files_from_output(fix_crew)
+        
+        if "REJECTED" in str(result).upper():
+            print("\n[Engine] Maximum iterations reached. Final result is still REJECTED.")
+        else:
+            print("\n[Engine] Feature APPROVED.")
+
+        # Update memory and commit (using the final result)
         self._update_memory(user_story, str(result))
         
         # Auto-commit if git is enabled
