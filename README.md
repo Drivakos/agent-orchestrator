@@ -1,24 +1,36 @@
-# CrewAI Agent Orchestrator
+# CrewAI Agent Orchestrator (v2)
 
-An interactive CLI tool that orchestrates a team of AI agents (Product Manager, Developer, QA, Architect) using [CrewAI](https://crewai.com) to plan, code, and test features based on user stories.
+An advanced interactive CLI tool that orchestrates a specialized team of AI agents to plan, develop, test, and document software features. Optimized for local models (via Ollama) with a focus on reliability, verification, and automated workflows.
 
-## Features
+## New in v2: Advanced Agentic Workflow
 
-- **Project Management**: Create new projects or continue working on existing ones.
+- **Iterative Feedback Loop**: If the **Chief Architect** finds bugs, missing tests, or incomplete work, the task is automatically routed back to the Developer for a "Fix Round" (up to 3 iterations).
+- **Sandboxed Code Execution**: A **DevOps Engineer** agent executes generated code and tests in real-time using a safe local runner, reporting logs back to the team.
+- **Web Search Capabilities**: Agents can use **SerperDevTool** to research documentation, verify library versions, and find solutions to errors on the fly.
+- **Local Model Optimizations**:
+  - **Brainstorming**: Product Managers generate and compare multiple approaches before selecting the best implementation path.
+  - **Self-Critique**: Developers perform a "Self-Critique" pass on their code to catch logical errors before submission.
+  - **Automated Linting**: Integrated **Syntax Checker (flake8)** to catch indentation and syntax errors automatically.
+- **Documentation Specialist**: A dedicated agent ensures `README.md` and project docs are updated alongside code changes.
+
+## Core Features
+
+- **Project Management**: Create new projects or continue working on existing ones with persistent memory.
 - **Git Integration**: 
   - **Auto-Init**: Option to initialize a Git repository for new projects.
   - **Version Control**: Automatically tracks version and branch in `project_metadata.json`.
   - **Auto-Commit**: Automatically commits changes (with version increment) upon successful feature implementation.
-  - **Auto-Push**: Automatically pushes changes to `origin` if a remote is configured for the project.
+  - **Auto-Push**: Automatically pushes changes to `origin` if a remote is configured.
 - **Context Awareness**: 
-  - **Memory**: Tracks implemented features.
-  - **File Structure**: Agents receive a real-time tree view of the project's files, ensuring they know exactly where code resides.
+  - **Memory**: Persistent tracking of implemented features in `memory.md`.
+  - **File Structure**: Agents receive a real-time tree view of the project's files.
 - **Role-Based Workflow**:
-  - **Product Manager**: Plans the feature implementation.
-  - **Senior Developer**: Writes the code.
+  - **Product Manager**: Brainstorms and plans features.
+  - **Senior Developer**: Writes code with self-critique pass.
   - **QA Engineer**: Writes unit tests.
-  - **Chief Architect**: Reviews and approves the work.
-- **Automated Output**: Automatically saves generated code and tests to the `projects/<project_name>/code` directory.
+  - **DevOps Engineer**: Executes code/tests and checks syntax.
+  - **Docs Specialist**: Updates project documentation.
+  - **Chief Architect**: Final review and "APPROVED/REJECTED" verdict.
 
 ## Setup
 
@@ -28,41 +40,36 @@ An interactive CLI tool that orchestrates a team of AI agents (Product Manager, 
     cd agent-orchestrator
     ```
 
-2.  **Create and activate a virtual environment:**
+2.  **Activate virtual environment & Install dependencies:**
     ```bash
     python -m venv venv
-    # Windows
-    venv\Scripts\activate
-    # Linux/Mac
-    source venv/bin/activate
-    ```
-
-3.  **Install dependencies:**
-    ```bash
+    venv\Scripts\activate  # Windows
     pip install -r requirements.txt
     ```
 
-4.  **Configuration:**
-    Copy `.env.example` to `.env` and add your API keys (e.g., OpenAI, Ollama URL).
+3.  **Configuration:**
+    Copy `.env.example` to `.env` and configure your LLM (Ollama/OpenAI) and Serper API key.
     ```bash
     cp .env.example .env
     ```
-    *Note: The `.env` file is git-ignored to prevent sensitive data leaks.*
 
 ## Usage
 
-Run the main application:
-
+Run the orchestrator:
 ```bash
 python main.py
 ```
 
-1.  Select an existing project or enter a name for a new one.
-2.  **Git Setup**: 
-    - **New Projects**: You will be asked if you want to initialize a git repository.
-    - **Existing Projects**: You can add a Remote URL if one isn't configured, or initialize git if missing.
-3.  Enter a "User Story" or feature description when prompted.
-    - **Example Question:** "How do we handle Redis in this project?" (PM answers)
-    - **Example Task:** "Implement a Redis caching layer for the user API." (Crew executes & Commits)
-4.  The agent crew will analyze, plan, implement, and test the feature.
-5.  Generated files will be saved in `projects/<your_project>/code`.
+### Running the Orchestrator's Own Tests
+We maintain high code coverage for the orchestrator itself. To run our unit and integration tests:
+```bash
+# Run all tests
+venv\Scripts\python -m unittest discover tests
+```
+
+## How it works (The "Fix" Cycle)
+1. **User Story** is entered.
+2. **PM** plans, **Dev** codes, **QA** tests, **DevOps** runs the code.
+3. **Architect** reviews the combined output and logs.
+4. **If REJECTED**: The loop restarts from the Developer with the Architect's feedback.
+5. **If APPROVED**: Files are saved, docs are updated, and changes are committed to Git.
