@@ -333,6 +333,16 @@ class CrewEngine:
             tools=[self.code_tool],
             llm=self.llm
         )
+        
+        docs_agent = Agent(
+            role='Documentation Specialist',
+            goal='Update project documentation.',
+            backstory="You are responsible for keeping the documentation up to date. You document the new features and how to use them.",
+            verbose=True,
+            allow_delegation=False,
+            tools=[self.file_writer],
+            llm=self.llm
+        )
 
         reviewer_agent = Agent(
             role='Chief Architect',
@@ -349,13 +359,34 @@ class CrewEngine:
 
         # --- Tasks ---
         task_plan = Task(
-            description=f"Plan the feature: '{user_story}'. Consider the existing memory: {memory_context}.",
-            expected_output="Implementation plan.",
+            description=f"""
+            Plan the feature: '{user_story}'. 
+            Consider the existing memory: {memory_context}.
+            
+            **Brainstorming Phase:**
+            1. Generate 3 distinct implementation approaches (e.g., different libraries, patterns, or algorithms).
+            2. List Pros/Cons for each.
+            3. Select the BEST approach.
+            
+            **Final Output:**
+            Provide the detailed implementation plan for the selected approach.
+            """,
+            expected_output="Implementation plan with brainstorming summary.",
             agent=pm_agent
         )
 
         task_dev = Task(
-            description="Write the code. Use '### filename' format.",
+            description="""
+            Write the code based on the plan. 
+            Use '### filename' format.
+            
+            **Self-Critique Phase:**
+            1. Draft the code.
+            2. Review your draft for logical errors, security issues, and style.
+            3. Fix any issues. 
+            
+            Output the FINAL corrected code.
+            """,
             expected_output="Source code in markdown.",
             agent=dev_agent,
             context=[task_plan]
@@ -374,22 +405,29 @@ class CrewEngine:
             agent=runner_agent,
             context=[task_qa]
         )
+        
+        task_docs = Task(
+            description="Create or update 'README.md' or 'CHANGELOG.md' to reflect the new feature and how to run it.",
+            expected_output="Documentation content.",
+            agent=docs_agent,
+            context=[task_plan, task_dev, task_runner]
+        )
 
         task_review = Task(
             description="""
-            Review the code, tests, and EXECUTION RESULTS.
+            Review the code, tests, EXECUTION RESULTS, and DOCUMENTATION.
             If tests failed, you MUST REJECT.
             If everything looks good, start your response with "APPROVED".
             If there are issues, start your response with "REJECTED" and list the specific feedback/issues that need fixing.
             """,
             expected_output="Verdict (APPROVED or REJECTED with feedback).",
             agent=reviewer_agent,
-            context=[task_plan, task_dev, task_qa, task_runner]
+            context=[task_plan, task_dev, task_qa, task_runner, task_docs]
         )
 
         crew = Crew(
-            agents=[pm_agent, dev_agent, qa_agent, runner_agent, reviewer_agent],
-            tasks=[task_plan, task_dev, task_qa, task_runner, task_review],
+            agents=[pm_agent, dev_agent, qa_agent, runner_agent, docs_agent, reviewer_agent],
+            tasks=[task_plan, task_dev, task_qa, task_runner, task_docs, task_review],
             process=Process.sequential,
             verbose=True
         )
