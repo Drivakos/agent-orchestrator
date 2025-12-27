@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Orchestrator Chat</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; height: 100vh; background-color: #f0f2f5; }
+        #sidebar { width: 300px; background-color: #2c3e50; color: white; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
+        #main { flex: 1; display: flex; flex-direction: column; padding: 20px; }
+        
+        #chat-history { flex: 1; overflow-y: auto; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        #input-area { display: flex; gap: 10px; }
+        
+        input[type="text"], select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; outline: none; box-sizing: border-box; }
+        button { padding: 10px 20px; background-color: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; transition: background 0.3s; margin-top: 5px; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+        
+        .message { margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .user-msg { color: #2c3e50; font-weight: bold; margin-bottom: 5px; }
+        .bot-msg { color: #444; line-height: 1.6; }
+        .bot-msg pre { background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        
+        h2 { margin-top: 0; margin-bottom: 10px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
+        
+        #new-project-form { background: #34495e; padding: 10px; border-radius: 8px; margin-top: 10px; }
+        #new-project-form input { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>Projects</h2>
+    <select id="project-select" onchange="switchProject()">
+        <option value="" disabled selected>Loading...</option>
+    </select>
+    
+    <button id="new-project-btn" onclick="toggleNewProject()">+ New Project</button>
+    
+    <div id="new-project-form" style="display:none;">
+        <label>Name:</label>
+        <input type="text" id="new-project-name" placeholder="my-new-project">
+        
+        <label style="display:flex; align-items:center; gap:5px;">
+            <input type="checkbox" id="init-git" onchange="toggleRemoteUrl()"> Init Git
+        </label>
+        
+        <input type="text" id="remote-url" placeholder="Remote URL (optional)" style="display:none;">
+        
+        <button onclick="createProject()" style="background-color: #27ae60; width:100%;">Create Project</button>
+        <button onclick="toggleNewProject()" style="background-color: #e74c3c; width:100%;">Cancel</button>
+    </div>
+    
+    <div style="margin-top: auto;">
+        <small id="current-project-label">Selected: None</small>
+    </div>
+</div>
+
+<div id="main">
+    <div id="chat-history">
+        <div class="message">
+            <div class="bot-msg">👋 Welcome! Select a project to start.</div>
+        </div>
+    </div>
+    <div id="input-area">
+        <input type="text" id="user-message" placeholder="Select a project first..." disabled onkeypress="handleEnter(event)">
+        <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+    </div>
+</div>
+
+<script>
+    const chatHistory = document.getElementById('chat-history');
+    const userMessageInput = document.getElementById('user-message');
+    const projectSelect = document.getElementById('project-select');
+    const sendBtn = document.getElementById('send-btn');
+    const newProjectForm = document.getElementById('new-project-form');
+    const remoteUrlInput = document.getElementById('remote-url');
+    const currentProjectLabel = document.getElementById('current-project-label');
+
+    // Load projects on start
+    fetchProjects();
+
+    async function fetchProjects() {
+        try {
+            const res = await fetch('http://localhost:8000/projects');
+            const data = await res.json();
+            projectSelect.innerHTML = '<option value="" disabled selected>Select a project...</option>';
+            data.projects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.innerText = p;
+                projectSelect.appendChild(opt);
+            });
+        } catch (e) {
+            console.error("Failed to load projects", e);
+            projectSelect.innerHTML = '<option disabled>Error loading projects</option>';
+        }
+    }
+
+    function switchProject() {
+        const project = projectSelect.value;
+        if (project) {
+            currentProjectLabel.innerText = `Selected: ${project}`;
+            userMessageInput.disabled = false;
+            sendBtn.disabled = false;
+            userMessageInput.placeholder = `Instruction for '${project}'...`;
+            chatHistory.innerHTML = ''; // Clear chat or fetch history if implemented
+            appendMessage('System', `Switched to project: ${project}`);
+        }
+    }
+
+    function toggleNewProject() {
+        newProjectForm.style.display = newProjectForm.style.display === 'none' ? 'block' : 'none';
+        document.getElementById('new-project-btn').style.display = newProjectForm.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function toggleRemoteUrl() {
+        remoteUrlInput.style.display = document.getElementById('init-git').checked ? 'block' : 'none';
+    }
+
+    async function createProject() {
+        const name = document.getElementById('new-project-name').value.trim();
+        const initGit = document.getElementById('init-git').checked;
+        const remote = document.getElementById('remote-url').value.trim();
+
+        if (!name) return alert("Project name is required");
+
+        try {
+            const res = await fetch('http://localhost:8000/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    project_name: name,
+                    init_git: initGit,
+                    remote_url: remote
+                })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                alert("Project created!");
+                toggleNewProject();
+                await fetchProjects();
+                projectSelect.value = name;
+                switchProject();
+            } else {
+                alert("Error: " + JSON.stringify(data));
+            }
+        } catch (e) {
+            alert("Failed to create project: " + e.message);
+        }
+    }
+
+    function handleEnter(e) {
+        if (e.key === 'Enter') sendMessage();
+    }
+
+    async function sendMessage() {
+        const text = userMessageInput.value.trim();
+        const project = projectSelect.value;
+        if (!text || !project) return;
+
+        appendMessage('You', text);
+        userMessageInput.value = '';
+        
+        setLoading(true);
+
+        try {
+            const response = await fetch('http://localhost:8000/message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    project_name: project,
+                    message: text
+                })
+            });
+
+            if (!response.ok) throw new Error(`Server Error: ${response.statusText}`);
+
+            const data = await response.json();
+            appendMessage('Orchestrator', data.response, true);
+
+        } catch (error) {
+            appendMessage('System', `Error: ${error.message}`);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function appendMessage(sender, text, isMarkdown = false) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message';
+        
+        const senderDiv = document.createElement('div');
+        senderDiv.className = 'user-msg';
+        senderDiv.innerText = sender;
+        
+        const textDiv = document.createElement('div');
+        textDiv.className = 'bot-msg';
+        
+        if (isMarkdown && window.marked) {
+            textDiv.innerHTML = marked.parse(text);
+        } else {
+            textDiv.innerText = text;
+        }
+
+        msgDiv.appendChild(senderDiv);
+        msgDiv.appendChild(textDiv);
+        chatHistory.appendChild(msgDiv);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    function setLoading(isLoading) {
+        sendBtn.disabled = isLoading;
+        userMessageInput.disabled = isLoading;
+        sendBtn.innerText = isLoading ? 'Processing...' : 'Send';
+        if (!isLoading) userMessageInput.focus();
+    }
+</script>
+
+</body>
+</html>
