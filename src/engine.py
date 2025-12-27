@@ -47,7 +47,6 @@ class CrewEngine:
         repo_exists = os.path.exists(os.path.join(self.base_dir, ".git"))
         
         if not repo_exists:
-            print(f"[Engine] Initializing Git repository for {self.project_name}...")
             try:
                 # Initialize Git
                 subprocess.run(["git", "init"], cwd=self.base_dir, check=True, capture_output=True)
@@ -72,7 +71,6 @@ class CrewEngine:
                 
                 # Ensure branch is main
                 subprocess.run(["git", "branch", "-m", "main"], cwd=self.base_dir, capture_output=True)
-                print(f"[Engine] Git repository initialized for {self.project_name}")
                 
             except Exception as e:
                 print(f"[Engine] Error initializing git: {e}")
@@ -84,13 +82,8 @@ class CrewEngine:
                 # Check if remote exists
                 result = subprocess.run(["git", "remote"], cwd=self.base_dir, capture_output=True, text=True)
                 if "origin" not in result.stdout:
-                    print(f"[Engine] Adding remote origin: {remote_url}")
                     subprocess.run(["git", "remote", "add", "origin", remote_url], cwd=self.base_dir, check=True, capture_output=True)
-                    print(f"[Engine] Pushing initial commit to remote...")
                     subprocess.run(["git", "push", "-u", "origin", "main"], cwd=self.base_dir, check=True, capture_output=True)
-                    print(f"[Engine] Initial push successful.")
-                else:
-                     print(f"[Engine] Remote 'origin' already exists. Skipping remote add.")
             except Exception as e:
                 print(f"[Engine] Error adding remote: {e}")
 
@@ -124,11 +117,9 @@ class CrewEngine:
                     json.dump(metadata, f, indent=4)
 
             # Git Commit
-            print(f"\n[Engine] Committing changes for version {version}...")
             subprocess.run(["git", "add", "."], cwd=self.base_dir, check=True, capture_output=True)
             commit_msg = f"feat: {user_story} (v{version})"
             subprocess.run(["git", "commit", "-m", commit_msg], cwd=self.base_dir, check=True, capture_output=True)
-            print(f"[Engine] Committed: {commit_msg}")
             
             # Push Changes
             self._push_changes()
@@ -146,9 +137,7 @@ class CrewEngine:
                 branch_res = subprocess.run(["git", "branch", "--show-current"], cwd=self.base_dir, capture_output=True, text=True)
                 branch = branch_res.stdout.strip()
                 
-                print(f"[Engine] Attempting to push to origin/{branch}...")
                 subprocess.run(["git", "push", "origin", branch], cwd=self.base_dir, check=True, capture_output=True)
-                print(f"[Engine] Successfully pushed changes.")
         except Exception as e:
             print(f"[Engine] Push warning: Could not push to remote. {e}")
 
@@ -196,7 +185,6 @@ class CrewEngine:
     def process_message(self, user_input):
         """Decides whether to chat or run a task based on user input."""
         intent = self._classify_intent(user_input)
-        print(f"\n[System] Detected intent: {intent}")
         
         if intent == "CHAT":
             return self._chat_with_pm(user_input)
@@ -357,7 +345,6 @@ class CrewEngine:
 
     def _save_files_from_output(self, crew):
         """Parses output from all tasks and saves files to the project code directory."""
-        print(f"\n[Engine] Saving files to: {self.output_dir}")
         for task in crew.tasks:
             if not task.output: continue
             
@@ -376,4 +363,3 @@ class CrewEngine:
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                 with open(full_path, 'w', encoding='utf-8') as f:
                     f.write(content)
-                print(f"  - Saved: {clean_filename}")

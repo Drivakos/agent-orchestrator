@@ -21,43 +21,71 @@ def get_project_selection():
     print("--------------------------")
     choice = input("Select a number or type a NEW project name: ").strip()
     
+    should_init_git = False
+    remote_url = None
+    
     if choice.isdigit():
         idx = int(choice) - 1
         if 0 <= idx < len(projects):
-            return projects[idx]
+            project_name = projects[idx]
+            project_path = os.path.join(projects_dir, project_name)
+            has_git = os.path.exists(os.path.join(project_path, ".git"))
+            
+            if not has_git:
+                git_choice = input(f"Initialize a git repository for '{project_name}'? (y/n): ").strip().lower()
+                should_init_git = git_choice == 'y'
+            else:
+                should_init_git = True # Set True so we can check/add remote in engine
+            
+            if should_init_git:
+                 remote_url = input("Enter Remote Repository URL (optional, press Enter to skip/keep existing): ").strip()
+                 if not remote_url:
+                    remote_url = None
+            
+            return project_name, should_init_git, remote_url
         else:
             print("Invalid selection. Creating new project with that name.")
-            return choice
-    return choice
+            project_name = choice
+    else:
+        project_name = choice
+        
+    # Ask for git initialization
+    if project_name not in projects:
+        git_choice = input(f"Initialize a git repository for '{project_name}'? (y/n): ").strip().lower()
+        should_init_git = git_choice == 'y'
+        
+        if should_init_git:
+            remote_url = input("Enter Remote Repository URL (optional, press Enter to skip): ").strip()
+            if not remote_url:
+                remote_url = None
+        
+    return project_name, should_init_git, remote_url
 
 if __name__ == "__main__":
     print("## Welcome to the CrewAI Agent Orchestrator (v2) ##")
     print("----------------------------------------------------")
     
-    project_name = get_project_selection()
+    project_name, should_init_git, remote_url = get_project_selection()
     if not project_name:
         project_name = "default_project"
         
-    engine = CrewEngine(project_name=project_name)
+    engine = CrewEngine(project_name=project_name, init_git=should_init_git, remote_url=remote_url)
     
     print(f"\n[System] Loaded project '{project_name}'.")
-    # Show last few lines of memory for context
-    mem_context = engine._get_memory_context()
-    print(f"[System] Memory Context (preview):\n...{mem_context[-200:] if len(mem_context) > 200 else mem_context}\n")
+    
+    # Display Project Metadata
+    meta = engine.get_project_metadata()
+    if meta:
+        print(f"[System] Version: {meta.get('version', 'unknown')} | Branch: {meta.get('branch', 'unknown')}")
     
     while True:
         user_story = input("\nEnter User Story (or 'exit'): ").strip()
         if user_story.lower() == 'exit' or not user_story:
             break
             
-        print(f"\n[System] Running Crew for: {user_story}...")
-        result = engine.run(user_story)
+        print(f"\n[System] Processing: {user_story}...")
+        result = engine.process_message(user_story)
         
-        print("\n########################")
-        print("##  CYCLE COMPLETED   ##")
-        print("########################\n")
+        print("\n--- Result ---")
         print(result)
-        
-        print("\n[System] Checking for unwritten files...")
-        # Since we are using engine.run, the saving happens inside the engine class now.
-        # But we can keep a secondary check if needed, though engine._save_files_from_output handles it.
+        print("--------------")
