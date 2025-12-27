@@ -4,7 +4,7 @@ import re
 import subprocess
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
-from crewai_tools import FileReadTool, FileWriterTool
+from crewai_tools import FileReadTool, FileWriterTool, SerperDevTool
 
 load_dotenv()
 
@@ -27,6 +27,13 @@ class CrewEngine:
         # Initialize Tools
         self.file_writer = FileWriterTool()
         self.file_reader = FileReadTool()
+        self.search_tool = None
+        
+        if os.getenv("SERPER_API_KEY"):
+            try:
+                self.search_tool = SerperDevTool()
+            except Exception as e:
+                print(f"[Engine] Warning: Could not initialize SerperDevTool: {e}")
         
         # Initialize LLM
         self.llm = LLM(
@@ -216,6 +223,11 @@ class CrewEngine:
         """Runs a chat session with the Product Manager using context."""
         memory_context = self._get_memory_context()
         
+        # Prepare tools for PM if available
+        pm_tools = []
+        if self.search_tool:
+            pm_tools.append(self.search_tool)
+        
         pm_agent = Agent(
             role='Product Manager',
             goal=f'Provide information about project "{self.project_name}".',
@@ -225,9 +237,11 @@ class CrewEngine:
             {memory_context}
             
             Answer the user's question based on the existing project state and your general knowledge.
+            If you need to check the web for latest info, use your Search Tool.
             Do not propose new implementation plans unless asked.""",
             verbose=True,
             allow_delegation=False,
+            tools=pm_tools,
             llm=self.llm
         )
         
@@ -245,6 +259,14 @@ class CrewEngine:
         
         memory_context = self._get_memory_context()
         
+        # --- Prepare Tools ---
+        pm_tools = []
+        dev_tools = [self.file_writer]
+        
+        if self.search_tool:
+            pm_tools.append(self.search_tool)
+            dev_tools.append(self.search_tool)
+
         # --- Agents ---
         pm_agent = Agent(
             role='Product Manager',
@@ -255,9 +277,11 @@ class CrewEngine:
             {memory_context}
             
             Your job is to plan the implementation of: '{user_story}'
-            Ensure it integrates with existing features.""",
+            Ensure it integrates with existing features.
+            Use your Search Tool if you need to research external APIs or libraries.""",
             verbose=True,
             allow_delegation=False,
+            tools=pm_tools,
             llm=self.llm
         )
 
@@ -271,10 +295,10 @@ class CrewEngine:
             code
             ```
             Relative paths should be based on the project root.
-            """,
+            Use your Search Tool if you run into errors or need documentation.""",
             verbose=True,
             allow_delegation=False,
-            tools=[self.file_writer],
+            tools=dev_tools,
             llm=self.llm
         )
 

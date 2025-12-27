@@ -12,8 +12,30 @@ from src.engine import CrewEngine
 class TestCrewEngineUnit(unittest.TestCase):
     def setUp(self):
         # We need to mock os.makedirs and other file system operations in __init__
-        with patch('os.makedirs'), patch('src.engine.LLM'), patch('src.engine.FileWriterTool'), patch('src.engine.FileReadTool'):
+        with patch('os.makedirs'), \
+             patch('src.engine.LLM'), \
+             patch('src.engine.FileWriterTool'), \
+             patch('src.engine.FileReadTool'), \
+             patch('src.engine.SerperDevTool'):
             self.engine = CrewEngine(project_name="test_proj")
+
+    @patch('src.engine.SerperDevTool')
+    @patch('os.getenv')
+    @patch('os.makedirs')
+    @patch('src.engine.LLM')
+    def test_search_tool_initialization(self, mock_llm, mock_makedirs, mock_getenv, MockSerper):
+        # Setup: SERPER_API_KEY is present
+        def getenv_side_effect(key, default=None):
+            if key == "SERPER_API_KEY": return "dummy_key"
+            if key == "OPENAI_API_KEY": return "dummy_key"
+            return default
+        mock_getenv.side_effect = getenv_side_effect
+        
+        with patch('src.engine.FileWriterTool'), patch('src.engine.FileReadTool'):
+             engine = CrewEngine(project_name="test_proj")
+        
+        self.assertIsNotNone(engine.search_tool)
+        MockSerper.assert_called_once()
 
     @patch('os.walk')
     def test_get_file_tree(self, mock_walk):
