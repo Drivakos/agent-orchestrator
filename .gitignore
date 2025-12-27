@@ -1,0 +1,17 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# Local Project Data (Don't commit your actual generated projects)
+projects/
+output/
