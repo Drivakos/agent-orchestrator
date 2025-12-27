@@ -317,7 +317,11 @@ class CrewEngine:
         runner_agent = Agent(
             role='DevOps Engineer',
             goal='Execute code and tests to verify functionality.',
-            backstory="You are the DevOps Engineer. You run the code and tests using the Code Executor tool and report the results.",
+            backstory="""You are the DevOps Engineer. You run the code and tests using the Code Executor tool and report the results.
+            **CRITICAL:** Do NOT attempt to run long or complex Python code using 'python -c'. 
+            If you need to run tests or code, ensure the Senior Developer or QA Engineer has written them to a file first. 
+            Then, use the Code Executor to run 'pytest <filename>' or 'python <filename>'.
+            """,
             verbose=True,
             allow_delegation=False,
             tools=[self.code_tool],
@@ -382,7 +386,13 @@ class CrewEngine:
             verbose=True
         )
 
-        result = crew.kickoff()
+        try:
+            result = crew.kickoff()
+        except Exception as e:
+            error_msg = f"Crew execution failed: {str(e)}"
+            print(f"\n[Engine] Error: {error_msg}")
+            return error_msg
+
         self._save_files_from_output(crew)
 
         # --- Iterative Feedback Loop ---
@@ -443,7 +453,13 @@ class CrewEngine:
                 verbose=True
             )
             
-            result = fix_crew.kickoff()
+            try:
+                result = fix_crew.kickoff()
+            except Exception as e:
+                error_msg = f"Fix cycle execution failed: {str(e)}"
+                print(f"\n[Engine] Error: {error_msg}")
+                return error_msg
+
             self._save_files_from_output(fix_crew)
         
         if "REJECTED" in str(result).upper():

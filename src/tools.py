@@ -5,14 +5,19 @@ import os
 
 class CodeExecutionTool(BaseTool):
     name: str = "Code Executor"
-    description: str = "Executes shell commands (like 'pytest' or 'python main.py') to run code and tests. Input is the command string."
+    description: str = "Executes shell commands (like 'pytest test_file.py' or 'python main.py'). PREFER running files over complex one-liners. Input is the command string."
     working_dir: str = Field(..., description="The directory where the command should be executed.")
 
     def _run(self, command: str) -> str:
         try:
             # Basic validation to ensure we are running python/pytest
-            if not (command.strip().startswith("python") or command.strip().startswith("pytest") or command.strip().startswith("pip")):
-                 return "Error: Only 'python', 'pytest', or 'pip' commands are allowed for safety."
+            cmd_clean = command.strip()
+            if not (cmd_clean.startswith("python") or cmd_clean.startswith("pytest") or cmd_clean.startswith("pip")):
+                 return "Error: Only 'python', 'pytest', or 'pip' commands are allowed for safety. Please write code to a file first if it's complex."
+
+            # Warn against long -c commands if they look too complex
+            if "python -c" in cmd_clean and len(cmd_clean) > 200:
+                return "Error: The 'python -c' command is too long and complex. Please write the code to a .py file using FileWriterTool and then run it using 'python <filename>'."
 
             result = subprocess.run(
                 command,
