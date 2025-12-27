@@ -4,7 +4,7 @@ import re
 import subprocess
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
-from crewai_tools import FileReadTool, FileWriterTool, SerperDevTool
+from crewai_tools import FileReadTool, FileWriterTool, SerperDevTool, DirectoryReadTool
 from src.tools import CodeExecutionTool, SyntaxCheckTool
 
 load_dotenv()
@@ -28,6 +28,7 @@ class CrewEngine:
         # Initialize Tools
         self.file_writer = FileWriterTool()
         self.file_reader = FileReadTool()
+        self.dir_reader = DirectoryReadTool(directory=self.output_dir)
         self.code_tool = CodeExecutionTool(working_dir=self.output_dir)
         self.syntax_tool = SyntaxCheckTool(working_dir=self.output_dir)
         self.search_tool = None
@@ -325,12 +326,14 @@ class CrewEngine:
             goal='Execute code and tests to verify functionality.',
             backstory="""You are the DevOps Engineer. You run the code and tests using the Code Executor tool and report the results.
             **CRITICAL:** Do NOT attempt to run long or complex Python code using 'python -c'. 
-            If you need to run tests or code, ensure the Senior Developer or QA Engineer has written them to a file first. 
+            If you need to run tests or code, ensure the Senior Developer or QA Engineer has written them to a file first.
+            
+            Use 'DirectoryReadTool' to check which files exist before running them.
             Then, use the Code Executor to run 'pytest <filename>' or 'python <filename>'.
             """,
             verbose=True,
             allow_delegation=False,
-            tools=[self.code_tool],
+            tools=[self.code_tool, self.dir_reader],
             llm=self.llm
         )
         
