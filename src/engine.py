@@ -5,7 +5,7 @@ import subprocess
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai_tools import FileReadTool, FileWriterTool, SerperDevTool
-from src.tools import CodeExecutionTool
+from src.tools import CodeExecutionTool, SyntaxCheckTool
 
 load_dotenv()
 
@@ -29,6 +29,7 @@ class CrewEngine:
         self.file_writer = FileWriterTool()
         self.file_reader = FileReadTool()
         self.code_tool = CodeExecutionTool(working_dir=self.output_dir)
+        self.syntax_tool = SyntaxCheckTool(working_dir=self.output_dir)
         self.search_tool = None
         
         if os.getenv("SERPER_API_KEY"):
@@ -263,7 +264,7 @@ class CrewEngine:
         
         # --- Prepare Tools ---
         pm_tools = []
-        dev_tools = [self.file_writer]
+        dev_tools = [self.file_writer, self.syntax_tool] # Developer gets syntax checker
         
         if self.search_tool:
             pm_tools.append(self.search_tool)
@@ -291,12 +292,17 @@ class CrewEngine:
             role='Senior Developer',
             goal='Write code and output it in Markdown blocks.',
             backstory=f"""You are the Lead Dev. 
-            Output files using this format:
-            ### filename
-            ```language
-            code
+            **CRITICAL:** Output files using this EXACT format:
+            ### filename.py
+            ```python
+            print("hello")
             ```
             Relative paths should be based on the project root.
+            
+            1. Write the code to files using the format above.
+            2. Use the 'Syntax Checker' tool on your new files to check for errors.
+            3. Fix any syntax errors BEFORE finishing. 
+            
             Use your Search Tool if you run into errors or need documentation.""",
             verbose=True,
             allow_delegation=False,
@@ -332,10 +338,12 @@ class CrewEngine:
             role='Chief Architect',
             goal='Review and Approval.',
             backstory="""Review the work. Check the source code, tests, AND the test execution results provided by the DevOps Engineer.
-            If tests failed or the code is buggy, REJECT it.
+            Use the 'Syntax Checker' tool if you suspect valid syntax issues.
+            If tests failed or the code is buggy/invalid, REJECT it.
             """,
             verbose=True,
             allow_delegation=True,
+            tools=[self.syntax_tool], # Reviewer gets syntax checker
             llm=self.llm
         )
 

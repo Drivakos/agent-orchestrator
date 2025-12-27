@@ -36,3 +36,28 @@ class CodeExecutionTool(BaseTool):
         except Exception as e:
             return f"Execution Execution Error: {str(e)}"
 
+class SyntaxCheckTool(BaseTool):
+    name: str = "Syntax Checker"
+    description: str = "Checks Python code for syntax errors and style issues using flake8. Input is the filename (e.g., 'main.py')."
+    working_dir: str = Field(..., description="The directory where the file is located.")
+
+    def _run(self, filename: str) -> str:
+        try:
+            file_path = os.path.join(self.working_dir, filename)
+            if not os.path.exists(file_path):
+                return f"Error: File '{filename}' not found."
+
+            # Run flake8
+            result = subprocess.run(
+                ["flake8", filename],
+                capture_output=True,
+                text=True,
+                cwd=self.working_dir
+            )
+            
+            if result.returncode == 0:
+                return "No syntax errors found."
+            else:
+                return f"Syntax/Style Issues:\n{result.stdout}\n{result.stderr}"
+        except Exception as e:
+            return f"Linting Error: {str(e)}"

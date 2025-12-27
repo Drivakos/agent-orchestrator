@@ -17,7 +17,8 @@ class TestCrewEngineUnit(unittest.TestCase):
              patch('src.engine.FileWriterTool'), \
              patch('src.engine.FileReadTool'), \
              patch('src.engine.SerperDevTool'), \
-             patch('src.engine.CodeExecutionTool'):
+             patch('src.engine.CodeExecutionTool'), \
+             patch('src.engine.SyntaxCheckTool'):
             self.engine = CrewEngine(project_name="test_proj")
 
     @patch('src.engine.SerperDevTool')
